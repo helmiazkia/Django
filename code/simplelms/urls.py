@@ -19,6 +19,7 @@ from django.urls import include, path
 from django.urls import path
 # simplelms/urls.py
 from core import views
+from core.apiv1 import apiv1 
 
 
 urlpatterns = [
@@ -30,5 +31,6 @@ urlpatterns = [
     path('course_member_stats/', views.courseMemberStat, name='course_member_stats'),
     path('silk/', include('silk.urls', namespace='silk')),
     path('course-statistics/', views.courseStat, name='course_statistics'),
-     path('course-member-statistics/', views.courseMemberStat, name='course_member_statistics'),# Add this line
+    path('course-member-statistics/', views.courseMemberStat, name='course_member_statistics'),# Add this line
+    path('api/v1/', apiv1.urls),
 ]
