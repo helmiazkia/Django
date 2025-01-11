@@ -16,8 +16,6 @@ Including another URLconf
 """
 from django.contrib import admin
 from django.urls import include, path
-from django.conf.urls.static import static
-
 
 # simplelms/urls.py
 from core import views
@@ -34,6 +32,7 @@ urlpatterns = [
     path('silk/', include('silk.urls', namespace='silk')),
     path('course-statistics/', views.courseStat, name='course_statistics'),
     path("api/", api.urls),  # Tambahkan ini untuk endpoint API
+    path('course-member-statistics/', views.courseMemberStat, name='course_member_statistics'),# Add this line,
     
 
 ]

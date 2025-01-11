@@ -1,36 +1,36 @@
+from pydantic import BaseModel, Field
+from typing import Optional, List
+from pydantic import BaseModel
 from datetime import datetime
-from ninja import Schema
 
-class UserSchema(Schema):
-    id: int
-    username: str
-    email: str
-    first_name: str
-    last_name: str
 
-class CourseSchema(Schema):
+
+# Skema untuk Course
+class CourseSchema(BaseModel):
     id: int
     name: str
     description: str
     price: int
-    teacher: UserSchema
-    created_at: datetime  # Tetap datetime
-    updated_at: datetime  # Tetap datetime
-    is_deleted: bool
+    teacher: Optional[dict]  # Representasi informasi guru
 
     class Config:
-        from_attributes = True
-        json_encoders = {
-            datetime: lambda v: v.isoformat(),  # Serialize datetime ke ISO 8601
-        }
+        orm_mode = True
 
-class CourseCreateSchema(Schema):
-    name: str
-    description: str
-    price: int
-    teacher_id: int  # Mengacu pada User ID
 
-class CourseUpdateSchema(Schema):
-    name: str = None
-    description: str = None
-    price: int = None
+# Skema untuk CourseMember
+
+class CourseMemberSchema(BaseModel):
+    course_id: int
+    user_id: int
+    roles: str
+    created_at: datetime
+    updated_at: datetime
+
+
+
+# Skema untuk CourseStatistics
+class CourseStatisticsSchema(BaseModel):
+    course_count: int
+    max_price: float
+    min_price: float
+    avg_price: float

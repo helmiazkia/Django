@@ -26,19 +26,7 @@ SECRET_KEY = 'django-insecure-ybg&92w^+hmg68k-$$p=nbs$#qsob=6!+^!51kb&3_h()#7oa*
 DEBUG = True
 
 ALLOWED_HOSTS = []
-from datetime import timedelta
 
-REST_FRAMEWORK = {
-    'DEFAULT_AUTHENTICATION_CLASSES': (
-        'rest_framework_simplejwt.authentication.JWTAuthentication',
-    ),
-}
-
-SIMPLE_JWT = {
-    'ACCESS_TOKEN_LIFETIME': timedelta(minutes=60),
-    'REFRESH_TOKEN_LIFETIME': timedelta(days=7),
-    'AUTH_HEADER_TYPES': ('Bearer',),
-}
 
 # Application definition
 
@@ -50,8 +38,6 @@ INSTALLED_APPS = [
     'django.contrib.messages',
     'django.contrib.staticfiles',
     'ninja',
-    'rest_framework',
-    'rest_framework_simplejwt',
     'silk'
     
 ]
@@ -65,8 +51,6 @@ MIDDLEWARE = [
     'django.contrib.messages.middleware.MessageMiddleware',
     'django.middleware.clickjacking.XFrameOptionsMiddleware',
     'silk.middleware.SilkyMiddleware',
-    'core.middleware.LoggingMiddleware'
-    
 ]
 
 ROOT_URLCONF = 'simplelms.urls'
@@ -99,7 +83,6 @@ DATABASES = {
         'NAME': BASE_DIR / 'db.sqlite3',
     }
 }
-
 
 
 # Password validation

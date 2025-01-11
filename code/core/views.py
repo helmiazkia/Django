@@ -108,5 +108,3 @@ def courseMemberStat(request):
         'data': course_data
     }
     return JsonResponse(result, safe=False)
-
-
