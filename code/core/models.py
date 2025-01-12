@@ -36,9 +36,13 @@ class CourseMember(models.Model):
     class Meta:
         verbose_name = "Subscriber Matkul"
         verbose_name_plural = "Subscriber Matkul"
+        constraints = [
+            models.UniqueConstraint(fields=['course_id', 'user_id'], name='unique_course_member')
+        ]
 
     def __str__(self) -> str:
         return f"{self.id} {self.course_id} : {self.user_id}"
+
 
 class CourseContent(models.Model):
     name = models.CharField("judul konten", max_length=200)
@@ -71,4 +75,4 @@ class Comment(models.Model):
         verbose_name_plural = "Komentar"
 
     def __str__(self) -> str:
-        return "Komen: "+self.member_id.user_id+"-"+self.comment
+        return f"Komen ID {self.id}: {self.member_id.user_id} - {self.comment}"

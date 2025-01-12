@@ -113,6 +113,7 @@ def list_content_comment(request, content_id: int):
 
 
 # - create content comment
+# - create content comment
 @apiv1.post("/contents/{content_id}/comments", auth=apiAuth, response={201: CourseCommentOut})
 def create_content_comment(request, content_id: int, data: CourseCommentIn):
     try:
@@ -124,16 +125,30 @@ def create_content_comment(request, content_id: int, data: CourseCommentIn):
     if not content.course_id.is_member(user):
         return Response({"error": "You are not authorized to create a comment in this content"}, status=401)
     
-    member = CourseMember.objects.get(course_id=content.course_id, user_id=user)
+    # Gunakan filter() dan first() untuk menangani kemungkinan ada lebih dari satu CourseMember
+    member = CourseMember.objects.filter(course_id=content.course_id, user_id=user).first()
+    
+    if not member:
+        return Response({"error": "You are not enrolled in this course"}, status=404)
+    
     comment = Comment(content_id=content, member_id=member, comment=data.comment)
     comment.save()
     return 201, comment
 
 # - delete content comment
-@apiv1.delete("/comments/{comment_id}", auth=apiAuth)
-def delete_comment(request, comment_id: int):
-    comment = Comment.objects.get(id=comment_id)
-    if comment.member_id.user_id.id != request.user.id:
-        return {"error": "You are not authorized to delete this comment"}
-    comment.delete()
-    return {"message": "Comment deleted"}   
+# - delete content comment
+@apiv1.delete("/contents/{content_id}/comments", auth=apiAuth)
+def delete_comment_by_content(request, content_id: int):
+    # Cari komentar yang terkait dengan content_id dan user yang sedang login
+    comments = Comment.objects.filter(content_id=content_id, member_id__user_id=request.user)
+    
+    if not comments.exists():
+        return Response({"error": "Comment not found for the given content and user"}, status=404)
+    
+    # Hapus semua komentar yang ditemukan
+    deleted_count, _ = comments.delete()
+    
+    if deleted_count > 0:
+        return {"message": "Comment(s) deleted successfully"}
+    else:
+        return Response({"error": "No comments were deleted"}, status=404)
