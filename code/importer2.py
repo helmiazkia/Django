@@ -1,62 +1,78 @@
 import os
 import sys
-import django
-import csv
-
-# Menentukan path untuk settings Django
 sys.path.append(os.path.abspath(os.path.join(__file__, *[os.pardir] * 3)))
 os.environ['DJANGO_SETTINGS_MODULE'] = 'simplelms.settings'
-
-# Inisialisasi Django
+import django
 django.setup()
 
-# Import model dari Django
+import csv
+import json
+from random import randint
 from django.contrib.auth.models import User
-from core.models import Course, CourseMember
+from django.contrib.auth.hashers import make_password
+from core.models import Course, CourseMember, CourseContent, Comment
 
-# Fungsi untuk mengimpor data user dari CSV
-def import_users():
-    with open('./csv_data/user-data.csv') as csvfile:
+import time
+start_time = time.time()
+
+filepath = './csv_data/'
+
+with open(filepath+'user-data.csv') as csvfile:
         reader = csv.DictReader(csvfile)
+        obj_create = []
         for num, row in enumerate(reader):
             if not User.objects.filter(username=row['username']).exists():
-                User.objects.create_user(
-                    id=num+2,
-                    username=row['username'], 
-                    password=row['password'], 
-                    email=row['email']
-                )
+                obj_create.append(User(username=row['username'], 
+                                         password=make_password(row['password']), 
+                                         email=row['email'],
+                                         first_name=row['firstname'],
+                                         last_name=row['lastname']))
+        User.objects.bulk_create(obj_create)
 
-# Fungsi untuk mengimpor data course dari CSV
-def import_courses():
-    with open('./csv_data/course-data.csv') as csvfile:
-        reader = csv.DictReader(csvfile)
-        for num, row in enumerate(reader):           
-            if not Course.objects.filter(pk=num+1).exists():                        
-                Course.objects.create(
-                    id=num+1, 
-                    name=row['name'], 
-                    description=row['description'], 
-                    price=row['price'],
-                    teacher=User.objects.get(pk=int(row['teacher']))
-                )
 
-# Fungsi untuk mengimpor data course member dari CSV
-def import_course_members():
-    with open('./csv_data/member-data.csv') as csvfile:
-        reader = csv.DictReader(csvfile)
-        for num, row in enumerate(reader):
-            if not CourseMember.objects.filter(pk=num+1).exists():
-                CourseMember.objects.create(
-                    course_id=Course.objects.get(pk=int(row['course_id'])),
-                    user_id=User.objects.get(pk=int(row['user_id'])),
-                    id=num+1,
-                    roles=row['roles']
-                )
+with open(filepath+'course-data.csv') as csvfile:
+    reader = csv.DictReader(csvfile)
+    obj_create = []
+    for num,row in enumerate(reader):
+        if not Course.objects.filter(pk=num+1).exists():
+            obj_create.append(Course(name=row['name'], price=row['price'],
+                                  description=row['description'], 
+                                  teacher=User.objects.get(pk=int(row['teacher']))))
+    Course.objects.bulk_create(obj_create)
 
-# Menjalankan fungsi-fungsi impor
-if __name__ == '__main__':
-    import_users()
-    import_courses()
-    import_course_members()
-    print("Data berhasil diimpor dari CSV.")
+
+with open(filepath+'member-data.csv') as csvfile:
+    reader = csv.DictReader(csvfile)
+    obj_create = []
+    for num, row in enumerate(reader):
+        if not CourseMember.objects.filter(pk=num+1).exists():
+            obj_create.append(CourseMember(course_id=Course.objects.get(pk=int(row['course_id'])),
+                                        user_id=User.objects.get(pk=int(row['user_id'])), 
+                                        roles=row['roles']))
+    CourseMember.objects.bulk_create(obj_create)
+
+
+with open(filepath+'contents.json') as jsonfile:
+    comments = json.load(jsonfile)
+    obj_create = []
+    for num, row in enumerate(comments):
+        if not CourseContent.objects.filter(pk=num+1).exists():
+            obj_create.append(CourseContent(course_id=Course.objects.get(pk=int(row['course_id'])), 
+                                         video_url=row['video_url'], name=row['name'], 
+                                         description=row['description']))
+    CourseContent.objects.bulk_create(obj_create)
+
+
+with open(filepath+'comments.json') as jsonfile:
+    comments = json.load(jsonfile)
+    obj_create = []
+    for num, row in enumerate(comments):
+        if int(row['user_id']) > 50:
+            row['user_id'] = randint(5, 40)
+        if not Comment.objects.filter(pk=num+1).exists():
+            obj_create.append(Comment(content_id=CourseContent.objects.get(pk=int(row['content_id'])), 
+                                   member_id=User.objects.get(pk=int(row['user_id'])), 
+                                   comment=row['comment']))
+    Comment.objects.bulk_create(obj_create)
+
+print("--- %s seconds ---" % (time.time() - start_time))

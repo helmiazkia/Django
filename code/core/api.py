@@ -1,74 +1,139 @@
-from ninja import NinjaAPI
-from core.models import Course, CourseMember
-from core.schemas import CourseSchema, CourseMemberSchema, CourseStatisticsSchema
+from ninja import NinjaAPI, UploadedFile, File, Form
+from ninja.responses import Response
+from core.schema import CourseSchemaOut, CourseMemberOut, CourseSchemaIn
+from core.schema import CourseContentMini, CourseContentFull
+from core.schema import CourseCommentOut, CourseCommentIn
+from core.models import Course, CourseMember, CourseContent, Comment
+from ninja_simple_jwt.auth.views.api import mobile_auth_router
+from ninja_simple_jwt.auth.ninja_auth import HttpJwtAuth
+from ninja.pagination import paginate, PageNumberPagination
+from django.http import Http404
+
+
 from django.contrib.auth.models import User
-from django.db.models import Max, Min, Avg
-from typing import List
 
-api = NinjaAPI()
+apiv1 = NinjaAPI()
+from ninja.throttling import AnonRateThrottle, AuthRateThrottle
 
-
-@api.get('/courses', response=List[CourseSchema])
-def get_courses(request):
-    courses = Course.objects.all()  # Ambil semua data dari model Course
-    return [CourseSchema(
-        id=course.id,
-        name=course.name,
-        description=course.description,
-        price=course.price,
-        teacher={
-            "id": course.teacher.id,
-            "username": course.teacher.username,
-            "email": course.teacher.email,
-            "fullname": f"{course.teacher.first_name} {course.teacher.last_name}"
-        }
-    ) for course in courses]  # Konversi setiap objek model ke skema
-
-
-
-@api.get('/courses/{course_id}', response=CourseSchema)
-def get_course(request, course_id: int):
-    course = Course.objects.get(id=course_id)
-    return CourseSchema(**{
-        "id": course.id,
-        "name": course.name,
-        "description": course.description,
-        "price": course.price,
-        "teacher": {
-            "id": course.teacher.id,
-            "username": course.teacher.username,
-            "email": course.teacher.email,
-            "fullname": f"{course.teacher.first_name} {course.teacher.last_name}",
-        },
-    })
-
-
-
-@api.get("/course-statistics", response=CourseStatisticsSchema)
-def get_course_statistics(request):
-    stats = Course.objects.aggregate(
-        max_price=Max('price'),
-        min_price=Min('price'),
-        avg_price=Avg('price')
-    )
-    return {
-        "course_count": Course.objects.count(),
-        "max_price": stats["max_price"],
-        "min_price": stats["min_price"],
-        "avg_price": stats["avg_price"],
-    }
-
-
-@api.get('/course-members', response=List[CourseMemberSchema])
-def get_course_members(request):
-    members = CourseMember.objects.all()  # Ambil data dari model
-    return [
-        CourseMemberSchema(
-            course_id=member.course_id.id,
-            user_id=member.user_id.id,
-            roles=member.roles,
-            created_at=member.created_at,
-            updated_at=member.updated_at
-        )
-        for member in members  # Konversi setiap objek model ke skema
+apiv1 = NinjaAPI(
+    throttle=[
+        AnonRateThrottle("1/s"),  # Contoh: 10 requests/detik untuk pengguna anonim
+        AuthRateThrottle("1/s"),  # Contoh: 100 requests/detik untuk pengguna terautentikasi
     ]
+)
+apiv1.add_router("/auth/", mobile_auth_router)
+
+apiAuth = HttpJwtAuth()
+
+@apiv1.get("/hello")
+def hello(request):
+    return "Hello World"
+
+# - paginate list_courses
+@apiv1.get("/courses", response=list[CourseSchemaOut])
+@paginate(PageNumberPagination, page_size=1)
+def list_courses(request):
+    courses = Course.objects.select_related('teacher').all()
+    return courses
+
+# - my courses
+@apiv1.get("/mycourses", auth=apiAuth, response=list[CourseMemberOut])
+def my_courses(request):
+    user = User.objects.get(id=request.user.id)
+    courses = CourseMember.objects.select_related('user_id', 'course_id').filter(user_id=user)
+    return courses
+
+# - create course
+@apiv1.post("/courses", auth=apiAuth, response={201:CourseSchemaOut})
+def create_course(request, data: Form[CourseSchemaIn], image: UploadedFile = File(None)):
+    user = User.objects.get(id=request.user.id)
+    course = Course(
+        name=data.name,
+        description=data.description,
+        price=data.price,
+        image=image,
+        teacher=user
+    )
+
+    if image:
+        course.image.save(image.name, image)
+
+    course.save()
+    return 201, course
+
+# - update course
+@apiv1.post("/courses/{course_id}", auth=apiAuth, response=CourseSchemaOut)
+def update_course(request, course_id: int, data: Form[CourseSchemaIn], image: UploadedFile = File(None)):
+    if request.user.id != Course.objects.get(id=course_id).teacher.id:
+        message = {"error": "Anda tidak diijinkan update course ini"}
+        return Response(message, status=401)
+    
+    course = Course.objects.get(id=course_id)
+    course.name = data.name
+    course.description = data.description
+    course.price = data.price
+    if image:
+        course.image.save(image.name, image)
+    course.save()
+    return course
+
+# - detail course
+@apiv1.get("/courses/{course_id}", response=CourseSchemaOut)
+def detail_course(request, course_id: int):
+    course = Course.objects.select_related('teacher').get(id=course_id)
+    return course
+
+# - list content course
+@apiv1.get("/courses/{course_id}/contents", response=list[CourseContentMini])
+def list_content_course(request, course_id: int):
+    contents = CourseContent.objects.filter(course_id=course_id)
+    return contents
+
+# - detail content course
+@apiv1.get("/courses/{course_id}/contents/{content_id}", response=CourseContentFull)
+def detail_content_course(request, course_id: int, content_id: int):
+    content = CourseContent.objects.get(id=content_id)
+    return content
+
+# - enroll course
+@apiv1.post("/courses/{course_id}/enroll", auth=apiAuth, response=CourseMemberOut)
+def enroll_course(request, course_id: int):
+    user = User.objects.get(id=request.user.id)
+    course = Course.objects.get(id=course_id)
+    course_member = CourseMember(course_id=course, user_id=user, roles="std")
+    course_member.save()
+    # print(course_member)
+    return course_member
+
+# - list content comment
+@apiv1.get("/contents/{content_id}/comments", auth=apiAuth, response=list[CourseCommentOut])
+def list_content_comment(request, content_id: int):
+    comments = Comment.objects.filter(content_id=content_id).select_related('member_id', 'member_id__user_id')
+    return comments
+
+
+# - create content comment
+@apiv1.post("/contents/{content_id}/comments", auth=apiAuth, response={201: CourseCommentOut})
+def create_content_comment(request, content_id: int, data: CourseCommentIn):
+    try:
+        content = CourseContent.objects.get(id=content_id)
+    except CourseContent.DoesNotExist:
+        raise Http404(f"Content with id {content_id} not found")
+
+    user = request.user
+    if not content.course_id.is_member(user):
+        return Response({"error": "You are not authorized to create a comment in this content"}, status=401)
+    
+    member = CourseMember.objects.get(course_id=content.course_id, user_id=user)
+    comment = Comment(content_id=content, member_id=member, comment=data.comment)
+    comment.save()
+    return 201, comment
+
+# - delete content comment
+@apiv1.delete("/comments/{comment_id}", auth=apiAuth)
+def delete_comment(request, comment_id: int):
+    comment = Comment.objects.get(id=comment_id)
+    if comment.member_id.user_id.id != request.user.id:
+        return {"error": "You are not authorized to delete this comment"}
+    comment.delete()
+    return {"message": "Comment deleted"}   

@@ -1,6 +1,13 @@
-django
-psycopg2-binary
-Pillow
-django-silk==5.1.0
-djangorestframework>=3.14.0
+django          # frameworknya
+psycopg2-binary # driver postgres
+django-silk
+pillow          # untuk mengolah gambar
 django-ninja
+django-ninja-simple-jwt
+
+# Testing
+pytest>=7.0.0
+pytest-django>=4.5.2
+
+# Lainnya (opsional, tambahkan sesuai kebutuhan)
+pydantic>=1.10.0

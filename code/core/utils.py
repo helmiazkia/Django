@@ -1,19 +1,38 @@
-from ninja.pagination import PaginationBase
-from ninja import Schema
+import re
 
-class CustomPagination(PaginationBase):
-    class Input(Schema):
-        skip: int
+def calculator(a, b, operator):
+    if operator == '+':
+        return a + b
+    elif operator == '-':
+        return a - b
+    elif operator == 'x':
+        return a * b
+    elif operator == '/':
+        if b == 0:
+            raise ValueError("Cannot divide by zero")
+        return a / b
+    else:
+        raise ValueError("Invalid operator")
 
-    class Output(Schema):
-        items: list
-        total: int
-        per_page: int
+def validate_password(password):
+    if len(password) < 8:
+        return False
+    if not re.search(r"[A-Z]", password):  # Memeriksa huruf besar
+        return False
+    if not re.search(r"[a-z]", password):  # Memeriksa huruf kecil
+        return False
+    if not re.search(r"[0-9]", password):  # Memeriksa angka
+        return False
+    if not re.search(r"[!@#$%^&*()]", password):  # Memeriksa karakter khusus
+        return False
+    return True
 
-    def paginate_queryset(self, queryset, pagination: Input, **params):
-        skip = pagination.skip
-        return {
-            'items': queryset[skip:skip + 5],
-            'total': queryset.count(),
-            'per_page': 5,
-        }
+from ninja.throttling import AnonRateThrottle
+
+class NoReadsThrottle(AnonRateThrottle):
+    """Do not throttle GET requests"""
+
+    def allow_request(self, request):
+        if request.method == "GET":
+            return True
+        return super().allow_request(request)

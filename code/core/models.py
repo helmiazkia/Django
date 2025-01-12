@@ -1,33 +1,35 @@
 from django.db import models
 from django.contrib.auth.models import User
 
+# Create your models here.
 class Course(models.Model):
-    name = models.CharField("nama matkul", max_length=100)
-    description = models.TextField("deskripsi", default='-')
-    price = models.IntegerField("harga", default=10000)
-    image = models.ImageField("gambar", null=True, blank=True)
-    teacher = models.ForeignKey(User, verbose_name="pengajar", on_delete=models.RESTRICT)
-    created_at = models.DateTimeField(auto_now_add=True)
-    updated_at = models.DateTimeField(auto_now=True)
-    is_deleted = models.BooleanField(default=False)  # Field untuk soft delete
+    name = models.CharField("Nama Kursus", max_length=255)
+    description = models.TextField("Deskripsi")
+    price = models.IntegerField("Harga")
+    image = models.ImageField("Gambar", upload_to="course", blank=True, null=True)
+    teacher = models.ForeignKey(User, verbose_name="Pengajar", on_delete=models.RESTRICT)
+    is_deleted = models.BooleanField("Dihapus?", default=False)  # Tambahkan ini
+    created_at = models.DateTimeField("Dibuat pada", auto_now_add=True)
+    updated_at = models.DateTimeField("Diperbarui pada", auto_now=True)
 
+    def __str__(self):
+        return self.name
+
+    
     class Meta:
         verbose_name = "Mata Kuliah"
-        verbose_name_plural = "Mata Kuliah"
+        verbose_name_plural = "Data Mata Kuliah"
+        ordering = ["-created_at"]
 
-    def __str__(self) -> str:
-        return f"{self.name} : {self.price}"
-
-    def delete(self):
-        self.is_deleted = True
-        self.save()
+    def is_member(self, user):
+        return CourseMember.objects.filter(course_id=self, user_id=user).exists()
 
 ROLE_OPTIONS = [('std', "Siswa"), ('ast', "Asisten")]
 
 class CourseMember(models.Model):
     course_id = models.ForeignKey(Course, verbose_name="matkul", on_delete=models.RESTRICT)
     user_id = models.ForeignKey(User, verbose_name="siswa", on_delete=models.RESTRICT)
-    roles = models.CharField("peran", max_length=50, choices=ROLE_OPTIONS, default='std')
+    roles = models.CharField("peran", max_length=3, choices=ROLE_OPTIONS, default='std')
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 
@@ -36,7 +38,7 @@ class CourseMember(models.Model):
         verbose_name_plural = "Subscriber Matkul"
 
     def __str__(self) -> str:
-        return f"{self.course_id} : {self.user_id.username}"  # Memperbaiki untuk menunjukkan nama pengguna
+        return f"{self.id} {self.course_id} : {self.user_id}"
 
 class CourseContent(models.Model):
     name = models.CharField("judul konten", max_length=200)
@@ -44,21 +46,18 @@ class CourseContent(models.Model):
     video_url = models.CharField('URL Video', max_length=200, null=True, blank=True)
     file_attachment = models.FileField("File", null=True, blank=True)
     course_id = models.ForeignKey(Course, verbose_name="matkul", on_delete=models.RESTRICT)
-    parent_id = models.ForeignKey("self", verbose_name="induk", on_delete=models.RESTRICT, null=True, blank=True)
+    parent_id = models.ForeignKey("self", verbose_name="induk", 
+                                on_delete=models.RESTRICT, null=True, blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
-    is_deleted = models.BooleanField(default=False)  # Field untuk soft delete
 
     class Meta:
         verbose_name = "Konten Matkul"
         verbose_name_plural = "Konten Matkul"
 
     def __str__(self) -> str:
-        return f"[{self.course_id}] {self.name}"
+        return f'{self.course_id} {self.name}'
 
-    def delete(self):
-        self.is_deleted = True
-        self.save()
 
 class Comment(models.Model):
     content_id = models.ForeignKey(CourseContent, verbose_name="konten", on_delete=models.CASCADE)
@@ -66,10 +65,10 @@ class Comment(models.Model):
     comment = models.TextField('komentar')
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
-
+    
     class Meta:
         verbose_name = "Komentar"
         verbose_name_plural = "Komentar"
 
     def __str__(self) -> str:
-        return f"Komen: {self.content_id.name} - {self.member_id.user_id.username}"  # Memperbaiki untuk menunjukkan nama pengguna
+        return "Komen: "+self.member_id.user_id+"-"+self.comment
