@@ -15,14 +15,18 @@ class UserBehavior(TaskSet):
             self.token = response.json().get("access")  # Ambil token akses
         else:
             print("Login failed:", response.text)
+            self.token = None  # Jika login gagal, set token ke None
 
     @task(1)
     def get_my_courses(self):
+        if not self.token:
+            print("No token found, skipping this task.")
+            return
+        
         headers = {"Authorization": f"Bearer {self.token}"}
         response = self.client.get("/mycourses", headers=headers)
         if response.status_code == 200:
             self.courses = response.json()  # Simpan daftar kursus
-            # print("My Courses:", self.courses)
             if self.courses:
                 self.course_id = self.courses[0]['course_id']['id']  # Ambil ID kursus pertama
                 self.get_course_contents(self.course_id)
@@ -32,7 +36,6 @@ class UserBehavior(TaskSet):
         response = self.client.get(f"/courses/{course_id}/contents", headers=headers)
         if response.status_code == 200:
             self.contents = response.json()  # Simpan daftar konten
-            # print("Course Contents:", self.contents)
             if self.contents:
                 self.content_id = self.contents[0]['id']  # Ambil ID konten pertama
                 self.post_comment(self.content_id)
@@ -43,7 +46,6 @@ class UserBehavior(TaskSet):
         response = self.client.post(f"/contents/{content_id}/comments", json=comment_data, headers=headers)
         if response.status_code == 201:
             self.comment_id = response.json().get("id")  # Ambil ID komentar
-            # print("Comment posted:", response.json())
             self.delete_comment(self.comment_id)
 
     def delete_comment(self, comment_id):

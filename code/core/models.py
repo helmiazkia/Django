@@ -50,8 +50,8 @@ class CourseContent(models.Model):
     video_url = models.CharField('URL Video', max_length=200, null=True, blank=True)
     file_attachment = models.FileField("File", null=True, blank=True)
     course_id = models.ForeignKey(Course, verbose_name="matkul", on_delete=models.RESTRICT)
-    parent_id = models.ForeignKey("self", verbose_name="induk", 
-                                on_delete=models.RESTRICT, null=True, blank=True)
+    parent_id = models.ForeignKey("self", verbose_name="induk", on_delete=models.RESTRICT, null=True, blank=True)
+    is_deleted = models.BooleanField("Dihapus?", default=False)  # Tambahkan default=False
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 

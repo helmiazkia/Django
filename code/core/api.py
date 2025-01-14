@@ -17,8 +17,8 @@ from ninja.throttling import AnonRateThrottle, AuthRateThrottle
 
 apiv1 = NinjaAPI(
     throttle=[
-        AnonRateThrottle("1/s"),  # Contoh: 10 requests/detik untuk pengguna anonim
-        AuthRateThrottle("1/s"),  # Contoh: 100 requests/detik untuk pengguna terautentikasi
+        AnonRateThrottle("1/s"),  # Contoh: 1 request/detik untuk pengguna anonim
+        AuthRateThrottle("1/s"),  # Contoh: 1 requests/detik untuk pengguna terautentikasi
     ]
 )
 apiv1.add_router("/auth/", mobile_auth_router)
@@ -31,7 +31,7 @@ def hello(request):
 
 # - paginate list_courses
 @apiv1.get("/courses", response=list[CourseSchemaOut])
-@paginate(PageNumberPagination, page_size=1)
+@paginate(PageNumberPagination, page_size=3)
 def list_courses(request):
     courses = Course.objects.select_related('teacher').all()
     return courses
@@ -83,6 +83,7 @@ def detail_course(request, course_id: int):
     course = Course.objects.select_related('teacher').get(id=course_id)
     return course
 
+
 # - list content course
 @apiv1.get("/courses/{course_id}/contents", response=list[CourseContentMini])
 def list_content_course(request, course_id: int):
@@ -104,6 +105,77 @@ def enroll_course(request, course_id: int):
     course_member.save()
     # print(course_member)
     return course_member
+
+@apiv1.get("/courses/{course_id}/contents/{content_id}", response=CourseContentFull)
+def detail_content(request, course_id: int, content_id: int):
+    try:
+        course = Course.objects.get(id=course_id)
+        content = CourseContent.objects.get(id=content_id, course_id=course)
+    except (Course.DoesNotExist, CourseContent.DoesNotExist):
+        raise Http404("Course or Content not found.")
+
+    return content
+
+
+@apiv1.post("/courses/{course_id}/contents", auth=apiAuth, response={201: CourseContentMini})
+def create_content(request, course_id: int, name: str = Form(...), description: str = Form(...), video_url: str = Form(None), file_attachment: UploadedFile = File(None)):
+    try:
+        course = Course.objects.get(id=course_id)
+    except Course.DoesNotExist:
+        raise Http404(f"Course dengan ID {course_id} tidak ditemukan.")
+
+    # Membuat konten baru untuk kursus
+    content = CourseContent(
+        name=name,
+        description=description,
+        video_url=video_url,
+        file_attachment=file_attachment,
+        course_id=course  # Menghubungkan dengan course_id, bukan detail lengkap
+    )
+
+    # Menyimpan file lampiran jika ada
+    if file_attachment:
+        content.file_attachment.save(file_attachment.name, file_attachment)
+
+    # Menyimpan konten ke database
+    content.save()
+
+    # Mengembalikan konten dalam format CourseContentMini
+    return 201, CourseContentMini.from_orm(content)
+
+
+@apiv1.put("/courses/{course_id}/contents/{content_id}", auth=apiAuth, response=CourseContentMini)
+def update_content(request, course_id: int, content_id: int, name: str = Form(...), description: str = Form(...), video_url: str = Form(None), file_attachment: UploadedFile = File(None), is_deleted: bool = Form(False)):
+    try:
+        course = Course.objects.get(id=course_id)
+        content = CourseContent.objects.get(id=content_id, course_id=course)
+    except (Course.DoesNotExist, CourseContent.DoesNotExist):
+        raise Http404("Course or Content not found.")
+
+    content.name = name
+    content.description = description
+    content.video_url = video_url
+    content.is_deleted = is_deleted
+    
+    if file_attachment:
+        content.file_attachment.save(file_attachment.name, file_attachment)
+
+    content.save()
+
+    return content
+
+@apiv1.delete("/courses/{course_id}/contents/{content_id}", auth=apiAuth)
+def delete_content(request, course_id: int, content_id: int):
+    try:
+        course = Course.objects.get(id=course_id)
+        content = CourseContent.objects.get(id=content_id, course_id=course)
+    except (Course.DoesNotExist, CourseContent.DoesNotExist):
+        raise Http404("Course or Content not found.")
+
+    content.delete()
+    
+    return {"message": "Content deleted successfully"}
+
 
 # - list content comment
 @apiv1.get("/contents/{content_id}/comments", auth=apiAuth, response=list[CourseCommentOut])
@@ -136,18 +208,31 @@ def create_content_comment(request, content_id: int, data: CourseCommentIn):
     return 201, comment
 
 # - delete content comment
-# - delete content comment
 @apiv1.delete("/contents/{content_id}/comments", auth=apiAuth)
 def delete_comment_by_content(request, content_id: int):
-    # Cari komentar yang terkait dengan content_id dan user yang sedang login
-    comments = Comment.objects.filter(content_id=content_id, member_id__user_id=request.user)
+    # Cari komentar terkait dengan content_id dan dibuat oleh pengguna yang sedang login
+    comments = Comment.objects.filter(
+        content_id=content_id, 
+        member_id__user_id=request.user
+    )
+
+    # Periksa apakah pengguna adalah instruktur atau admin kursus
+    is_instructor = Course.objects.filter(
+        id=content_id, 
+        teacher_id=request.user.id
+    ).exists()
+
+    if not comments.exists() and not is_instructor:
+        return Response({"error": "Comment not found or you do not have permission to delete this comment"}, status=404)
+
+    # Jika pengguna adalah instruktur, hapus semua komentar terkait content_id
+    if is_instructor:
+        deleted_count, _ = Comment.objects.filter(content_id=content_id).delete()
+        return {"message": f"Deleted {deleted_count} comment(s) successfully"}
     
-    if not comments.exists():
-        return Response({"error": "Comment not found for the given content and user"}, status=404)
-    
-    # Hapus semua komentar yang ditemukan
+    # Jika pengguna hanya pembuat komentar, hapus komentarnya saja
     deleted_count, _ = comments.delete()
-    
+
     if deleted_count > 0:
         return {"message": "Comment(s) deleted successfully"}
     else:
